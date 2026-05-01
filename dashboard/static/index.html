@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Crypto AI Trading Bot</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script>
+    tailwind.config = { darkMode: 'class' };
+  </script>
+  <style>
+    body { background: #0f1117; color: #e2e8f0; font-family: 'Inter', system-ui, sans-serif; }
+    .card { background: #1a1d2e; border: 1px solid #2d3148; border-radius: 12px; }
+    .badge-long { background: #064e3b; color: #34d399; }
+    .badge-short { background: #450a0a; color: #f87171; }
+    .badge-none { background: #1e293b; color: #94a3b8; }
+    .score-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+    .score-filled { background: #f59e0b; }
+    .score-empty { background: #374151; }
+    .pnl-pos { color: #34d399; }
+    .pnl-neg { color: #f87171; }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: #1a1d2e; }
+    ::-webkit-scrollbar-thumb { background: #374151; border-radius: 3px; }
+    .pulse-green { animation: pulseGreen 2s infinite; }
+    @keyframes pulseGreen { 0%,100%{opacity:1} 50%{opacity:0.5} }
+  </style>
+</head>
+<body class="min-h-screen p-4">
+
+  <!-- HEADER -->
+  <header class="flex items-center justify-between mb-6">
+    <div class="flex items-center gap-3">
+      <div class="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-lg">⚡</div>
+      <h1 class="text-xl font-bold">Crypto AI Trading Bot</h1>
+      <span id="botStatusBadge" class="text-xs px-2 py-1 rounded-full badge-none">Checking...</span>
+    </div>
+    <div class="flex items-center gap-3">
+      <button id="botToggleBtn"
+        class="px-4 py-2 rounded-lg text-sm font-medium bg-indigo-600 hover:bg-indigo-700 transition"
+        onclick="toggleBot()">Start Bot</button>
+      <div class="text-right">
+        <div class="text-xs text-slate-400">Balance</div>
+        <div id="balanceDisplay" class="font-mono font-bold">$0.00</div>
+      </div>
+    </div>
+  </header>
+
+  <!-- STATS ROW -->
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="card p-4">
+      <div class="text-xs text-slate-400 mb-1">Free USDT</div>
+      <div id="statFree" class="text-xl font-bold font-mono">$0.00</div>
+    </div>
+    <div class="card p-4">
+      <div class="text-xs text-slate-400 mb-1">Total PnL</div>
+      <div id="statPnl" class="text-xl font-bold font-mono">$0.00</div>
+    </div>
+    <div class="card p-4">
+      <div class="text-xs text-slate-400 mb-1">Win Rate</div>
+      <div id="statWinRate" class="text-xl font-bold">0%</div>
+    </div>
+    <div class="card p-4">
+      <div class="text-xs text-slate-400 mb-1">Total Trades</div>
+      <div id="statTrades" class="text-xl font-bold">0</div>
+    </div>
+  </div>
+
+  <!-- MAIN GRID -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+
+    <!-- SYMBOLS SIGNAL GRID -->
+    <div class="lg:col-span-2 card p-4">
+      <h2 class="text-sm font-semibold text-slate-300 mb-3">📊 Signal Scanner</h2>
+      <div id="symbolsGrid" class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
+        <!-- filled by JS -->
+      </div>
+    </div>
+
+    <!-- LIVE SIGNAL FEED -->
+    <div class="card p-4 flex flex-col">
+      <h2 class="text-sm font-semibold text-slate-300 mb-3">🔔 Signal Feed</h2>
+      <div id="signalFeed" class="flex-1 overflow-y-auto space-y-2 max-h-72">
+        <div class="text-xs text-slate-500 text-center pt-8">Waiting for signals...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- POSITIONS + HISTORY -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+    <!-- OPEN POSITIONS -->
+    <div class="card p-4">
+      <h2 class="text-sm font-semibold text-slate-300 mb-3">📈 Open Positions</h2>
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs">
+          <thead>
+            <tr class="text-slate-400 border-b border-slate-700">
+              <th class="text-left py-2 pr-3">Symbol</th>
+              <th class="text-left py-2 pr-3">Side</th>
+              <th class="text-right py-2 pr-3">Entry</th>
+              <th class="text-right py-2 pr-3">Liq.</th>
+              <th class="text-right py-2">PnL</th>
+            </tr>
+          </thead>
+          <tbody id="positionsTable">
+            <tr><td colspan="5" class="text-center text-slate-500 py-6">No open positions</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- TRADE HISTORY -->
+    <div class="card p-4">
+      <h2 class="text-sm font-semibold text-slate-300 mb-3">📜 Trade History</h2>
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs">
+          <thead>
+            <tr class="text-slate-400 border-b border-slate-700">
+              <th class="text-left py-2 pr-3">Symbol</th>
+              <th class="text-left py-2 pr-3">Side</th>
+              <th class="text-right py-2 pr-3">Entry</th>
+              <th class="text-right py-2 pr-3">Exit</th>
+              <th class="text-right py-2 pr-3">PnL</th>
+              <th class="text-right py-2">Score</th>
+            </tr>
+          </thead>
+          <tbody id="tradesTable">
+            <tr><td colspan="6" class="text-center text-slate-500 py-6">No trades yet</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONFIG PANEL -->
+  <div class="card p-4 mt-4">
+    <div class="flex items-center justify-between cursor-pointer" onclick="toggleConfig()">
+      <h2 class="text-sm font-semibold text-slate-300">⚙️ Configuration</h2>
+      <span id="configChevron" class="text-slate-400">▼</span>
+    </div>
+    <div id="configPanel" class="hidden mt-4 grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+      <div>
+        <label class="text-xs text-slate-400 block mb-1">Timeframe</label>
+        <div id="cfgTimeframe" class="font-mono text-indigo-400">4h</div>
+      </div>
+      <div>
+        <label class="text-xs text-slate-400 block mb-1">Risk per Trade</label>
+        <div id="cfgRisk" class="font-mono text-indigo-400">2%</div>
+      </div>
+      <div>
+        <label class="text-xs text-slate-400 block mb-1">Max Leverage</label>
+        <div id="cfgLeverage" class="font-mono text-indigo-400">5x</div>
+      </div>
+      <div>
+        <label class="text-xs text-slate-400 block mb-1">Max Positions</label>
+        <div id="cfgMaxPos" class="font-mono text-indigo-400">3</div>
+      </div>
+      <div>
+        <label class="text-xs text-slate-400 block mb-1">Min Signal Score</label>
+        <div id="cfgMinScore" class="font-mono text-indigo-400">4/5</div>
+      </div>
+      <div>
+        <label class="text-xs text-slate-400 block mb-1">Scan Interval</label>
+        <div class="font-mono text-indigo-400">5 min</div>
+      </div>
+      <div class="md:col-span-3">
+        <label class="text-xs text-slate-400 block mb-1">Active Symbols</label>
+        <div id="cfgSymbols" class="flex flex-wrap gap-2"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+const API = '';
+let botRunning = false;
+let symbolScores = {};
+
+// ─── WebSocket ─────────────────────────────────────────────
+function connectWS() {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const ws = new WebSocket(`${proto}://${location.host}/ws`);
+
+  ws.onmessage = (e) => {
+    const msg = JSON.parse(e.data);
+    if (msg.event === 'tick') {
+      renderPositions(msg.data.positions);
+      updateBalance(msg.data.balance);
+    } else if (msg.event === 'signal') {
+      addSignalToFeed(msg.data);
+      symbolScores[msg.data.symbol] = msg.data;
+      renderSymbolCards();
+    } else if (msg.event === 'trade_opened') {
+      loadTrades();
+      showToast(`✅ Trade opened: ${cleanSym(msg.data.symbol)} ${msg.data.side.toUpperCase()}`, 'green');
+    }
+  };
+
+  ws.onclose = () => setTimeout(connectWS, 3000);
+  ws.onerror = () => ws.close();
+}
+
+// ─── Initial Load ──────────────────────────────────────────
+async function init() {
+  await loadStatus();
+  await loadTrades();
+  await loadSignals();
+  connectWS();
+  setInterval(loadStatus, 30000);
+  setInterval(loadTrades, 60000);
+}
+
+async function loadStatus() {
+  try {
+    const r = await fetch(`${API}/api/status`);
+    const d = await r.json();
+    botRunning = d.running;
+    updateBotUI(d.running);
+    updateBalance(d.balance);
+    updateStats(d.stats);
+    updateConfig(d.config, d.symbols);
+    if (d.symbols) initSymbolCards(d.symbols);
+  } catch(e) {}
+}
+
+async function loadTrades() {
+  try {
+    const r = await fetch(`${API}/api/trades?limit=30`);
+    const trades = await r.json();
+    renderTrades(trades);
+  } catch(e) {}
+}
+
+async function loadSignals() {
+  try {
+    const r = await fetch(`${API}/api/signals?limit=20`);
+    const signals = await r.json();
+    const feed = document.getElementById('signalFeed');
+    feed.innerHTML = '';
+    signals.forEach(s => addSignalToFeed(s));
+  } catch(e) {}
+}
+
+// ─── UI Updates ────────────────────────────────────────────
+function cleanSym(s) {
+  return s.replace('/USDT:USDT','').replace('/USDT','');
+}
+
+function updateBalance(bal) {
+  document.getElementById('balanceDisplay').textContent = `$${(bal.total||0).toLocaleString('en', {minimumFractionDigits:2,maximumFractionDigits:2})}`;
+  document.getElementById('statFree').textContent = `$${(bal.free||0).toLocaleString('en', {minimumFractionDigits:2,maximumFractionDigits:2})}`;
+}
+
+function updateStats(s) {
+  if (!s) return;
+  const pnlEl = document.getElementById('statPnl');
+  pnlEl.textContent = `${s.total_pnl >= 0 ? '+' : ''}$${s.total_pnl.toFixed(2)}`;
+  pnlEl.className = `text-xl font-bold font-mono ${s.total_pnl >= 0 ? 'pnl-pos' : 'pnl-neg'}`;
+  document.getElementById('statWinRate').textContent = `${s.win_rate}%`;
+  document.getElementById('statTrades').textContent = s.total_trades;
+}
+
+function updateBotUI(running) {
+  const badge = document.getElementById('botStatusBadge');
+  const btn = document.getElementById('botToggleBtn');
+  if (running) {
+    badge.textContent = '● LIVE';
+    badge.className = 'text-xs px-2 py-1 rounded-full badge-long pulse-green';
+    btn.textContent = 'Stop Bot';
+    btn.className = 'px-4 py-2 rounded-lg text-sm font-medium bg-red-700 hover:bg-red-800 transition';
+  } else {
+    badge.textContent = '○ STOPPED';
+    badge.className = 'text-xs px-2 py-1 rounded-full badge-none';
+    btn.textContent = 'Start Bot';
+    btn.className = 'px-4 py-2 rounded-lg text-sm font-medium bg-indigo-600 hover:bg-indigo-700 transition';
+  }
+}
+
+function updateConfig(cfg, symbols) {
+  if (!cfg) return;
+  document.getElementById('cfgTimeframe').textContent = cfg.timeframe;
+  document.getElementById('cfgRisk').textContent = `${(cfg.risk_per_trade*100).toFixed(0)}%`;
+  document.getElementById('cfgLeverage').textContent = `${cfg.max_leverage}x`;
+  document.getElementById('cfgMaxPos').textContent = cfg.max_open_positions;
+  document.getElementById('cfgMinScore').textContent = `${cfg.min_signal_score}/5`;
+  if (symbols) {
+    document.getElementById('cfgSymbols').innerHTML = symbols.map(s =>
+      `<span class="text-xs px-2 py-1 rounded bg-slate-700 font-mono">${cleanSym(s)}</span>`
+    ).join('');
+  }
+}
+
+function scoreDotsHTML(score) {
+  let h = '';
+  for (let i = 0; i < 5; i++) {
+    h += `<span class="score-dot ${i < score ? 'score-filled' : 'score-empty'}"></span>`;
+  }
+  return h;
+}
+
+function initSymbolCards(symbols) {
+  const grid = document.getElementById('symbolsGrid');
+  if (grid.children.length === symbols.length) return;
+  grid.innerHTML = symbols.map(sym => {
+    const s = cleanSym(sym);
+    return `
+    <div id="card_${s}" class="card p-3 flex flex-col gap-1">
+      <div class="text-xs font-bold text-slate-300">${s}</div>
+      <div id="card_${s}_price" class="font-mono text-sm">—</div>
+      <div id="card_${s}_side" class="text-xs badge-none rounded px-1 py-0.5 inline-block w-fit">—</div>
+      <div id="card_${s}_dots" class="flex gap-1 mt-1">${scoreDotsHTML(0)}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderSymbolCards() {
+  Object.values(symbolScores).forEach(sig => {
+    const s = cleanSym(sig.symbol);
+    const priceEl = document.getElementById(`card_${s}_price`);
+    const sideEl = document.getElementById(`card_${s}_side`);
+    const dotsEl = document.getElementById(`card_${s}_dots`);
+    if (!priceEl) return;
+    priceEl.textContent = `$${parseFloat(sig.price).toLocaleString('en', {minimumFractionDigits:2,maximumFractionDigits:4})}`;
+    sideEl.textContent = sig.side.toUpperCase();
+    sideEl.className = `text-xs rounded px-1 py-0.5 inline-block w-fit badge-${sig.side}`;
+    dotsEl.innerHTML = scoreDotsHTML(sig.score || 0);
+  });
+}
+
+function addSignalToFeed(sig) {
+  const feed = document.getElementById('signalFeed');
+  const empty = feed.querySelector('.text-slate-500');
+  if (empty) empty.remove();
+
+  const color = sig.side === 'long' ? 'text-emerald-400' : sig.side === 'short' ? 'text-red-400' : 'text-slate-400';
+  const arrow = sig.side === 'long' ? '▲' : sig.side === 'short' ? '▼' : '—';
+  const el = document.createElement('div');
+  el.className = 'bg-slate-800 rounded-lg p-2 text-xs';
+  el.innerHTML = `
+    <div class="flex justify-between items-center">
+      <span class="font-bold">${cleanSym(sig.symbol)}</span>
+      <span class="${color} font-mono">${arrow} ${(sig.side||'').toUpperCase()}</span>
+    </div>
+    <div class="flex items-center gap-2 mt-1">
+      <div class="flex gap-0.5">${scoreDotsHTML(sig.score||0)}</div>
+      <span class="text-slate-400">${sig.score||0}/5</span>
+      <span class="text-slate-500 ml-auto">$${parseFloat(sig.price||0).toFixed(2)}</span>
+    </div>`;
+  feed.prepend(el);
+
+  // keep max 30 items
+  while (feed.children.length > 30) feed.removeChild(feed.lastChild);
+}
+
+function renderPositions(positions) {
+  const tbody = document.getElementById('positionsTable');
+  if (!positions || positions.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-slate-500 py-6">No open positions</td></tr>';
+    return;
+  }
+  tbody.innerHTML = positions.map(p => {
+    const pnlCls = p.unrealized_pnl >= 0 ? 'pnl-pos' : 'pnl-neg';
+    const pnlSign = p.unrealized_pnl >= 0 ? '+' : '';
+    const sideCls = p.side === 'long' ? 'badge-long' : 'badge-short';
+    return `<tr class="border-b border-slate-800">
+      <td class="py-2 pr-3 font-mono">${cleanSym(p.symbol)}</td>
+      <td class="py-2 pr-3"><span class="${sideCls} rounded px-1 text-xs">${(p.side||'').toUpperCase()}</span></td>
+      <td class="py-2 pr-3 text-right font-mono">$${parseFloat(p.entry_price).toFixed(4)}</td>
+      <td class="py-2 pr-3 text-right font-mono text-amber-400">$${parseFloat(p.liquidation_price||0).toFixed(4)}</td>
+      <td class="py-2 text-right font-mono ${pnlCls}">${pnlSign}$${parseFloat(p.unrealized_pnl).toFixed(2)}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderTrades(trades) {
+  const tbody = document.getElementById('tradesTable');
+  if (!trades || trades.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-slate-500 py-6">No trades yet</td></tr>';
+    return;
+  }
+  tbody.innerHTML = trades.map(t => {
+    const pnlCls = (t.pnl_usdt||0) >= 0 ? 'pnl-pos' : 'pnl-neg';
+    const pnlSign = (t.pnl_usdt||0) >= 0 ? '+' : '';
+    const statusColor = t.status === 'open' ? 'text-indigo-400' : pnlCls;
+    const pnlText = t.status === 'open' ? '—' : `${pnlSign}$${parseFloat(t.pnl_usdt||0).toFixed(2)}`;
+    return `<tr class="border-b border-slate-800 hover:bg-slate-800/30">
+      <td class="py-2 pr-3 font-mono">${cleanSym(t.symbol)}</td>
+      <td class="py-2 pr-3 text-xs">${(t.side||'').toUpperCase()}</td>
+      <td class="py-2 pr-3 text-right font-mono">$${parseFloat(t.entry_price||0).toFixed(4)}</td>
+      <td class="py-2 pr-3 text-right font-mono">${t.exit_price ? '$'+parseFloat(t.exit_price).toFixed(4) : '—'}</td>
+      <td class="py-2 pr-3 text-right font-mono ${statusColor}">${pnlText}</td>
+      <td class="py-2 text-right">${scoreDotsHTML(t.signal_score||0)}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ─── Actions ───────────────────────────────────────────────
+async function toggleBot() {
+  const endpoint = botRunning ? '/api/bot/stop' : '/api/bot/start';
+  try {
+    await fetch(`${API}${endpoint}`, { method: 'POST' });
+    await loadStatus();
+  } catch(e) {}
+}
+
+function toggleConfig() {
+  const panel = document.getElementById('configPanel');
+  const chevron = document.getElementById('configChevron');
+  if (panel.classList.contains('hidden')) {
+    panel.classList.remove('hidden');
+    chevron.textContent = '▲';
+  } else {
+    panel.classList.add('hidden');
+    chevron.textContent = '▼';
+  }
+}
+
+function showToast(msg, color = 'indigo') {
+  const t = document.createElement('div');
+  const bg = color === 'green' ? 'bg-emerald-800' : 'bg-indigo-800';
+  t.className = `fixed bottom-6 right-6 ${bg} text-white text-sm px-4 py-3 rounded-xl shadow-lg z-50 transition-opacity`;
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 500); }, 3000);
+}
+
+// ─── Start ─────────────────────────────────────────────────
+init();
+</script>
+</body>
+</html>
