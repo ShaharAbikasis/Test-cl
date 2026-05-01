@@ -10,7 +10,7 @@ def _build_exchange() -> ccxt.binanceusdm:
     options = {
         "apiKey": BINANCE_API_KEY,
         "secret": BINANCE_API_SECRET,
-        "options": {"defaultType": "future"},
+        "options": {"defaultType": "future", "adjustForTimeDifference": True},
     }
     if BINANCE_TESTNET:
         options["urls"] = {
