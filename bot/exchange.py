@@ -1,3 +1,4 @@
+import time as _time
 import ccxt.async_support as ccxt
 import pandas as pd
 from bot.config import (
@@ -30,8 +31,13 @@ exchange = _build_exchange()
 
 
 async def sync_time() -> None:
-    """Fetch server time and store the clock offset so all requests stay in sync."""
-    await exchange.load_time_difference()
+    """Measure the gap between local clock and Binance server clock, then apply it."""
+    before = int(_time.time() * 1000)
+    server_ms = await exchange.fetch_time()
+    after = int(_time.time() * 1000)
+    # mid-point of the request window is our best estimate of the actual send time
+    local_mid = (before + after) // 2
+    exchange.options["timeDifference"] = local_mid - server_ms
 
 
 async def fetch_ohlcv(symbol: str, timeframe: str = TIMEFRAME, limit: int = CANDLES_LIMIT) -> pd.DataFrame:

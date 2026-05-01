@@ -146,6 +146,7 @@ async def get_signals(limit: int = 20) -> list[dict]:
 
 async def _scan_symbols():
     try:
+        await sync_time()
         balance_data = await fetch_balance()
         balance = balance_data["free"]
         positions = await fetch_positions()
@@ -224,7 +225,6 @@ async def trading_loop():
     global _running
     _running = True
     logger.info("Trading loop started")
-    await sync_time()
     while _running:
         await _scan_symbols()
         await asyncio.sleep(config.SCAN_INTERVAL_SECONDS)
