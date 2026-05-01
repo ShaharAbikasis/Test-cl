@@ -1,5 +1,6 @@
 import time as _time
 import ccxt.async_support as ccxt
+import httpx
 import pandas as pd
 from bot.config import (
     BINANCE_API_KEY, BINANCE_API_SECRET, BINANCE_TESTNET,
@@ -30,14 +31,24 @@ def _build_exchange() -> ccxt.binanceusdm:
 exchange = _build_exchange()
 
 
+_TIME_URL = (
+    "https://testnet.binancefuture.com/fapi/v1/time"
+    if BINANCE_TESTNET
+    else "https://fapi.binance.com/fapi/v1/time"
+)
+
+
 async def sync_time() -> None:
-    """Measure the gap between local clock and Binance server clock, then apply it."""
-    before = int(_time.time() * 1000)
-    server_ms = await exchange.fetch_time()
-    after = int(_time.time() * 1000)
-    # mid-point of the request window is our best estimate of the actual send time
+    """Fetch server time via raw HTTP (no ccxt signing) and store the clock offset."""
+    async with httpx.AsyncClient(timeout=5) as client:
+        before = int(_time.time() * 1000)
+        r = await client.get(_TIME_URL)
+        after = int(_time.time() * 1000)
+    server_ms = r.json()["serverTime"]
     local_mid = (before + after) // 2
+    # Write directly into exchange.options so ccxt's sign() picks it up
     exchange.options["timeDifference"] = local_mid - server_ms
+    exchange.options["adjustForTimeDifference"] = True
 
 
 async def fetch_ohlcv(symbol: str, timeframe: str = TIMEFRAME, limit: int = CANDLES_LIMIT) -> pd.DataFrame:
