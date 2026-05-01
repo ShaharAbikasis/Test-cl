@@ -22,7 +22,7 @@ SYMBOLS = [
     "AVAX/USDT:USDT",
     "DOT/USDT:USDT",
     "LINK/USDT:USDT",
-    "MATIC/USDT:USDT",
+    "POL/USDT:USDT",
 ]
 
 TIMEFRAME = "4h"
