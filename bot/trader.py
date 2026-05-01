@@ -8,7 +8,7 @@ import aiosqlite
 from bot import config
 from bot.exchange import (
     fetch_ohlcv, fetch_balance, fetch_positions,
-    set_leverage, place_order, place_sl_tp
+    set_leverage, place_order, place_sl_tp, sync_time
 )
 from bot.strategy import evaluate_signal
 from bot.risk import calculate_trade_params
@@ -224,6 +224,7 @@ async def trading_loop():
     global _running
     _running = True
     logger.info("Trading loop started")
+    await sync_time()
     while _running:
         await _scan_symbols()
         await asyncio.sleep(config.SCAN_INTERVAL_SECONDS)

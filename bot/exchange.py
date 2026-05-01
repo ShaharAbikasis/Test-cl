@@ -7,22 +7,31 @@ from bot.config import (
 
 
 def _build_exchange() -> ccxt.binanceusdm:
-    options = {
+    cfg = {
         "apiKey": BINANCE_API_KEY,
         "secret": BINANCE_API_SECRET,
-        "options": {"defaultType": "future", "adjustForTimeDifference": True},
+        "adjustForTimeDifference": True,
+        "options": {
+            "defaultType": "future",
+            "recvWindow": 60000,
+        },
     }
     if BINANCE_TESTNET:
-        options["urls"] = {
+        cfg["urls"] = {
             "api": {
                 "public": "https://testnet.binancefuture.com",
                 "private": "https://testnet.binancefuture.com",
             }
         }
-    return ccxt.binanceusdm(options)
+    return ccxt.binanceusdm(cfg)
 
 
 exchange = _build_exchange()
+
+
+async def sync_time() -> None:
+    """Fetch server time and store the clock offset so all requests stay in sync."""
+    await exchange.load_time_difference()
 
 
 async def fetch_ohlcv(symbol: str, timeframe: str = TIMEFRAME, limit: int = CANDLES_LIMIT) -> pd.DataFrame:
