@@ -96,17 +96,18 @@ async def place_order(symbol: str, side: str, amount: float, price: float | None
     return await exchange.create_order(symbol, order_type, side, amount, price)
 
 
-async def place_sl_tp(symbol: str, side: str, amount: float, sl_price: float, tp_price: float) -> tuple[dict, dict]:
-    close_side = "sell" if side == "buy" else "buy"
-    sl = await exchange.create_order(
+async def place_stop_loss(symbol: str, close_side: str, amount: float, sl_price: float) -> dict:
+    return await exchange.create_order(
         symbol, "stop_market", close_side, amount,
-        params={"stopPrice": sl_price, "reduceOnly": True}
+        params={"stopPrice": round(sl_price, 4), "reduceOnly": True, "workingType": "MARK_PRICE"},
     )
-    tp = await exchange.create_order(
+
+
+async def place_take_profit(symbol: str, close_side: str, amount: float, tp_price: float) -> dict:
+    return await exchange.create_order(
         symbol, "take_profit_market", close_side, amount,
-        params={"stopPrice": tp_price, "reduceOnly": True}
+        params={"stopPrice": round(tp_price, 4), "reduceOnly": True, "workingType": "MARK_PRICE"},
     )
-    return sl, tp
 
 
 async def close_exchange() -> None:

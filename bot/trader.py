@@ -8,7 +8,7 @@ import aiosqlite
 from bot import config
 from bot.exchange import (
     fetch_ohlcv, fetch_balance, fetch_positions,
-    set_leverage, place_order, place_sl_tp, sync_time
+    set_leverage, place_order, place_stop_loss, place_take_profit, sync_time
 )
 from bot.strategy import evaluate_signal
 from bot.risk import calculate_trade_params
@@ -183,14 +183,26 @@ async def _scan_symbols():
 
                 await set_leverage(symbol, params["leverage"])
                 order_side = "buy" if signal.side == "long" else "sell"
+                close_side = "sell" if order_side == "buy" else "buy"
                 order = await place_order(symbol, order_side, params["qty"])
                 entry_price = float(order.get("average") or signal.price)
+                filled_qty = float(order.get("filled") or params["qty"])
 
-                await place_sl_tp(symbol, order_side, params["qty"], params["sl_price"], params["tp_price"])
+                try:
+                    await place_stop_loss(symbol, close_side, filled_qty, params["sl_price"])
+                    logger.info("SL placed for %s @ %s", symbol, params["sl_price"])
+                except Exception as sl_err:
+                    logger.error("SL placement failed for %s: %s", symbol, sl_err)
+
+                try:
+                    await place_take_profit(symbol, close_side, filled_qty, params["tp_price"])
+                    logger.info("TP placed for %s @ %s", symbol, params["tp_price"])
+                except Exception as tp_err:
+                    logger.error("TP placement failed for %s: %s", symbol, tp_err)
 
                 trade_id = await _save_trade_open(
                     symbol, signal.side, entry_price,
-                    params["qty"], params["leverage"], signal.score
+                    filled_qty, params["leverage"], signal.score
                 )
                 open_count += 1
 
