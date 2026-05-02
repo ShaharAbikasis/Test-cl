@@ -12,7 +12,10 @@ def calculate_trade_params(
     sl_mult = config.active["atr_sl_multiplier"]
     tp_mult = config.active["atr_tp_multiplier"]
 
-    sl_dist = atr * sl_mult
+    # Floor sl_dist to at least 0.3% of entry price so tiny ATR can't
+    # produce an astronomically large position size.
+    min_sl_dist = entry * 0.003
+    sl_dist = max(atr * sl_mult, min_sl_dist)
     tp_dist = atr * tp_mult
 
     if side == "long":
@@ -25,6 +28,12 @@ def calculate_trade_params(
     risk_usdt = balance * config.RISK_PER_TRADE
     position_usdt = risk_usdt / (sl_dist / entry)
     leverage = min(config.MAX_LEVERAGE, max(1, int(position_usdt / (balance * 0.1))))
+
+    # Safety cap: margin must not exceed 90% of free balance even when
+    # leverage is capped and ATR is small.
+    max_position_usdt = balance * leverage * 0.90
+    position_usdt = min(position_usdt, max_position_usdt)
+
     qty = position_usdt / entry
     qty = max(min_qty, round(qty - (qty % qty_step), 8))
 
