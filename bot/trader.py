@@ -168,8 +168,7 @@ async def _scan_symbols():
                     })
 
                 can_trade = (
-                    signal.score >= config.MIN_SIGNAL_SCORE
-                    and signal.side != "none"
+                    signal.side != "none"
                     and open_count < config.MAX_OPEN_POSITIONS
                     and balance > 10
                 )
