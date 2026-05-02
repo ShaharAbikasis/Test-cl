@@ -8,7 +8,8 @@ import aiosqlite
 from bot import config
 from bot.exchange import (
     fetch_ohlcv, fetch_balance, fetch_positions,
-    set_leverage, place_order, place_stop_loss, place_take_profit, sync_time
+    set_leverage, place_order, place_stop_loss, place_take_profit,
+    sync_time, load_markets,
 )
 from bot.strategy import evaluate_signal
 from bot.risk import calculate_trade_params
@@ -193,14 +194,14 @@ async def _scan_symbols():
                 filled_qty = float(order.get("filled") or params["qty"])
 
                 try:
-                    await place_stop_loss(symbol, close_side, filled_qty, params["sl_price"])
-                    logger.info("SL placed for %s @ %s", symbol, params["sl_price"])
+                    sl_order = await place_stop_loss(symbol, close_side, params["sl_price"])
+                    logger.info("SL placed for %s @ %s (id=%s)", symbol, params["sl_price"], sl_order.get("id"))
                 except Exception as sl_err:
                     logger.error("SL placement failed for %s: %s", symbol, sl_err)
 
                 try:
-                    await place_take_profit(symbol, close_side, filled_qty, params["tp_price"])
-                    logger.info("TP placed for %s @ %s", symbol, params["tp_price"])
+                    tp_order = await place_take_profit(symbol, close_side, params["tp_price"])
+                    logger.info("TP placed for %s @ %s (id=%s)", symbol, params["tp_price"], tp_order.get("id"))
                 except Exception as tp_err:
                     logger.error("TP placement failed for %s: %s", symbol, tp_err)
 
@@ -241,6 +242,7 @@ async def trading_loop():
     global _running
     _running = True
     logger.info("Trading loop started (mode: %s)", config.CURRENT_MODE)
+    await load_markets()
     while _running:
         await _scan_symbols()
         # Read scan_interval dynamically so mode switches take effect after current sleep

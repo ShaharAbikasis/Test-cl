@@ -94,23 +94,43 @@ async def set_leverage(symbol: str, leverage: int) -> None:
     await exchange.set_leverage(leverage, symbol)
 
 
+async def load_markets() -> None:
+    """Load market metadata (tick sizes, lot sizes). Must be called once at startup."""
+    await exchange.load_markets()
+
+
 async def place_order(symbol: str, side: str, amount: float, price: float | None = None) -> dict:
     order_type = "market" if price is None else "limit"
-    return await exchange.create_order(symbol, order_type, side, amount, price)
+    precise_qty = float(exchange.amount_to_precision(symbol, amount))
+    return await exchange.create_order(symbol, order_type, side, precise_qty, price)
 
 
-async def place_stop_loss(symbol: str, close_side: str, amount: float, sl_price: float) -> dict:
-    return await exchange.create_order(
-        symbol, "stop_market", close_side, amount,
-        params={"stopPrice": round(sl_price, 4), "reduceOnly": True, "workingType": "MARK_PRICE"},
+async def place_stop_loss(symbol: str, close_side: str, sl_price: float) -> dict:
+    """Place a STOP_MARKET order with closePosition=true (closes entire position)."""
+    precise_price = float(exchange.price_to_precision(symbol, sl_price))
+    order = await exchange.create_order(
+        symbol, "stop_market", close_side, 0,
+        params={
+            "stopPrice": precise_price,
+            "closePosition": "true",
+            "workingType": "MARK_PRICE",
+        },
     )
+    return order
 
 
-async def place_take_profit(symbol: str, close_side: str, amount: float, tp_price: float) -> dict:
-    return await exchange.create_order(
-        symbol, "take_profit_market", close_side, amount,
-        params={"stopPrice": round(tp_price, 4), "reduceOnly": True, "workingType": "MARK_PRICE"},
+async def place_take_profit(symbol: str, close_side: str, tp_price: float) -> dict:
+    """Place a TAKE_PROFIT_MARKET order with closePosition=true (closes entire position)."""
+    precise_price = float(exchange.price_to_precision(symbol, tp_price))
+    order = await exchange.create_order(
+        symbol, "take_profit_market", close_side, 0,
+        params={
+            "stopPrice": precise_price,
+            "closePosition": "true",
+            "workingType": "MARK_PRICE",
+        },
     )
+    return order
 
 
 async def close_exchange() -> None:
