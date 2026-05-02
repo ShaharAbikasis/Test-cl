@@ -75,7 +75,8 @@ async def get_status():
             "risk_per_trade": config.RISK_PER_TRADE,
             "max_leverage": config.MAX_LEVERAGE,
             "max_open_positions": config.MAX_OPEN_POSITIONS,
-            "min_signal_score": config.MIN_SIGNAL_SCORE,
+            "ml_confidence_threshold": config.ML_CONFIDENCE_THRESHOLD,
+            "adx_min_strength": config.ADX_MIN_STRENGTH,
             "timeframe": config.TIMEFRAME,
         },
     }
