@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 from lightgbm import LGBMClassifier
 
-from bot.config import ML_LABEL_HORIZON, ML_LABEL_PCT, ML_RETRAIN_HOURS
+from bot import config
 from bot.indicators import compute_indicators
 
 logger = logging.getLogger(__name__)
@@ -22,12 +22,12 @@ def _clean(symbol: str) -> str:
     return re.sub(r"[^A-Z0-9]", "_", symbol)
 
 
-def _model_path(symbol: str) -> Path:
-    return MODEL_DIR / f"model_{_clean(symbol)}.pkl"
+def _model_path(symbol: str, timeframe: str) -> Path:
+    return MODEL_DIR / f"model_{_clean(symbol)}_{timeframe}.pkl"
 
 
-def _timestamp_path(symbol: str) -> Path:
-    return MODEL_DIR / f"model_{_clean(symbol)}_trained_at.txt"
+def _timestamp_path(symbol: str, timeframe: str) -> Path:
+    return MODEL_DIR / f"model_{_clean(symbol)}_{timeframe}_trained_at.txt"
 
 
 def build_features(df: pd.DataFrame) -> pd.DataFrame:
@@ -86,17 +86,21 @@ def build_features(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def build_labels(df: pd.DataFrame) -> pd.Series:
-    future_close = df["close"].shift(-ML_LABEL_HORIZON)
-    return (future_close > df["close"] * (1 + ML_LABEL_PCT)).astype(int)
+    horizon = config.active["ml_label_horizon"]
+    pct = config.active["ml_label_pct"]
+    future_close = df["close"].shift(-horizon)
+    return (future_close > df["close"] * (1 + pct)).astype(int)
 
 
-def train_model(symbol: str, df: pd.DataFrame) -> LGBMClassifier | None:
+def train_model(symbol: str, df: pd.DataFrame, timeframe: str | None = None) -> LGBMClassifier | None:
+    tf = timeframe or config.active["timeframe"]
+    horizon = config.active["ml_label_horizon"]
     try:
         df_ind = compute_indicators(df)
         X = build_features(df_ind)
         y = build_labels(df_ind).reindex(X.index).dropna()
-        X = X.loc[y.index].iloc[:-ML_LABEL_HORIZON]  # drop last rows (no label yet)
-        y = y.iloc[:-ML_LABEL_HORIZON]
+        X = X.loc[y.index].iloc[:-horizon]
+        y = y.iloc[:-horizon]
 
         if len(X) < 100:
             logger.warning("Not enough data to train model for %s (%d rows)", symbol, len(X))
@@ -124,32 +128,33 @@ def train_model(symbol: str, df: pd.DataFrame) -> LGBMClassifier | None:
         from sklearn.metrics import roc_auc_score
         prob = model.predict_proba(X_val)[:, 1]
         auc = roc_auc_score(y_val, prob)
-        logger.info("Model trained for %s — AUC: %.3f  samples: %d", symbol, auc, len(X_train))
+        logger.info("Model trained for %s [%s] — AUC: %.3f  samples: %d", symbol, tf, auc, len(X_train))
 
-        joblib.dump(model, _model_path(symbol))
-        _timestamp_path(symbol).write_text(datetime.now(timezone.utc).isoformat())
+        joblib.dump(model, _model_path(symbol, tf))
+        _timestamp_path(symbol, tf).write_text(datetime.now(timezone.utc).isoformat())
         return model
 
     except Exception as e:
-        logger.error("Training failed for %s: %s", symbol, e)
+        logger.error("Training failed for %s [%s]: %s", symbol, tf, e)
         return None
 
 
-def _is_stale(symbol: str) -> bool:
-    ts_file = _timestamp_path(symbol)
+def _is_stale(symbol: str, timeframe: str) -> bool:
+    ts_file = _timestamp_path(symbol, timeframe)
     if not ts_file.exists():
         return True
     trained_at = datetime.fromisoformat(ts_file.read_text().strip())
     if trained_at.tzinfo is None:
         trained_at = trained_at.replace(tzinfo=timezone.utc)
-    return datetime.now(timezone.utc) - trained_at > timedelta(hours=ML_RETRAIN_HOURS)
+    return datetime.now(timezone.utc) - trained_at > timedelta(hours=config.ML_RETRAIN_HOURS)
 
 
-def load_model(symbol: str) -> LGBMClassifier | None:
-    path = _model_path(symbol)
+def load_model(symbol: str, timeframe: str | None = None) -> LGBMClassifier | None:
+    tf = timeframe or config.active["timeframe"]
+    path = _model_path(symbol, tf)
     if not path.exists():
         return None
-    if _is_stale(symbol):
+    if _is_stale(symbol, tf):
         return None
     try:
         return joblib.load(path)
@@ -157,11 +162,12 @@ def load_model(symbol: str) -> LGBMClassifier | None:
         return None
 
 
-def predict_proba_up(symbol: str, df: pd.DataFrame) -> float | None:
-    """Return probability that price goes UP >0.3% in next 4 candles, or None if unavailable."""
-    model = load_model(symbol)
+def predict_proba_up(symbol: str, df: pd.DataFrame, timeframe: str | None = None) -> float | None:
+    """Return probability that price goes UP in the next N candles, or None if unavailable."""
+    tf = timeframe or config.active["timeframe"]
+    model = load_model(symbol, tf)
     if model is None:
-        model = train_model(symbol, df)
+        model = train_model(symbol, df, tf)
     if model is None:
         return None
 
@@ -174,5 +180,5 @@ def predict_proba_up(symbol: str, df: pd.DataFrame) -> float | None:
         prob = float(model.predict_proba(last)[0][1])
         return prob
     except Exception as e:
-        logger.error("Prediction failed for %s: %s", symbol, e)
+        logger.error("Prediction failed for %s [%s]: %s", symbol, tf, e)
         return None

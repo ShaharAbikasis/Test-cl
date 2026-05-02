@@ -24,17 +24,34 @@
     ::-webkit-scrollbar-thumb { background: #374151; border-radius: 3px; }
     .pulse-green { animation: pulseGreen 2s infinite; }
     @keyframes pulseGreen { 0%,100%{opacity:1} 50%{opacity:0.5} }
+    .mode-btn { color: #94a3b8; }
+    .mode-btn:hover { background: #2d3148; color: #e2e8f0; }
+    .mode-btn.active { background: #4f46e5; color: #fff; }
   </style>
 </head>
 <body class="min-h-screen p-4">
 
   <!-- HEADER -->
-  <header class="flex items-center justify-between mb-6">
+  <header class="flex flex-wrap items-center justify-between gap-3 mb-6">
     <div class="flex items-center gap-3">
       <div class="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-lg">⚡</div>
       <h1 class="text-xl font-bold">Crypto AI Trading Bot</h1>
       <span id="botStatusBadge" class="text-xs px-2 py-1 rounded-full badge-none">Checking...</span>
     </div>
+
+    <!-- MODE SELECTOR -->
+    <div class="flex items-center gap-1 bg-slate-800 rounded-lg p-1" id="modeSelectorGroup">
+      <button id="modeBtn_scalp_15m"
+        class="mode-btn px-3 py-1.5 rounded-md text-xs font-medium transition"
+        onclick="switchMode('scalp_15m')">Scalp 15m</button>
+      <button id="modeBtn_swing_1h"
+        class="mode-btn px-3 py-1.5 rounded-md text-xs font-medium transition"
+        onclick="switchMode('swing_1h')">Swing 1H</button>
+      <button id="modeBtn_swing_4h"
+        class="mode-btn px-3 py-1.5 rounded-md text-xs font-medium transition"
+        onclick="switchMode('swing_4h')">Swing 4H</button>
+    </div>
+
     <div class="flex items-center gap-3">
       <button id="botToggleBtn"
         class="px-4 py-2 rounded-lg text-sm font-medium bg-indigo-600 hover:bg-indigo-700 transition"
@@ -139,10 +156,30 @@
       <h2 class="text-sm font-semibold text-slate-300">⚙️ Configuration</h2>
       <span id="configChevron" class="text-slate-400">▼</span>
     </div>
-    <div id="configPanel" class="hidden mt-4 grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+    <div id="configPanel" class="hidden mt-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
       <div>
         <label class="text-xs text-slate-400 block mb-1">Timeframe</label>
         <div id="cfgTimeframe" class="font-mono text-indigo-400">4h</div>
+      </div>
+      <div>
+        <label class="text-xs text-slate-400 block mb-1">Scan Interval</label>
+        <div id="cfgScanInterval" class="font-mono text-indigo-400">5 min</div>
+      </div>
+      <div>
+        <label class="text-xs text-slate-400 block mb-1">ML Confidence</label>
+        <div id="cfgMinScore" class="font-mono text-indigo-400">58%</div>
+      </div>
+      <div>
+        <label class="text-xs text-slate-400 block mb-1">ADX Min</label>
+        <div id="cfgAdx" class="font-mono text-indigo-400">20</div>
+      </div>
+      <div>
+        <label class="text-xs text-slate-400 block mb-1">SL Multiplier</label>
+        <div id="cfgSl" class="font-mono text-indigo-400">1.5× ATR</div>
+      </div>
+      <div>
+        <label class="text-xs text-slate-400 block mb-1">TP Multiplier</label>
+        <div id="cfgTp" class="font-mono text-indigo-400">3.0× ATR</div>
       </div>
       <div>
         <label class="text-xs text-slate-400 block mb-1">Risk per Trade</label>
@@ -152,19 +189,7 @@
         <label class="text-xs text-slate-400 block mb-1">Max Leverage</label>
         <div id="cfgLeverage" class="font-mono text-indigo-400">5x</div>
       </div>
-      <div>
-        <label class="text-xs text-slate-400 block mb-1">Max Positions</label>
-        <div id="cfgMaxPos" class="font-mono text-indigo-400">3</div>
-      </div>
-      <div>
-        <label class="text-xs text-slate-400 block mb-1">ML Confidence</label>
-        <div id="cfgMinScore" class="font-mono text-indigo-400">58%</div>
-      </div>
-      <div>
-        <label class="text-xs text-slate-400 block mb-1">Scan Interval</label>
-        <div class="font-mono text-indigo-400">5 min</div>
-      </div>
-      <div class="md:col-span-3">
+      <div class="col-span-2 md:col-span-4">
         <label class="text-xs text-slate-400 block mb-1">Active Symbols</label>
         <div id="cfgSymbols" class="flex flex-wrap gap-2"></div>
       </div>
@@ -175,6 +200,7 @@
 const API = '';
 let botRunning = false;
 let symbolScores = {};
+let currentMode = 'swing_4h';
 
 // ─── WebSocket ─────────────────────────────────────────────
 function connectWS() {
@@ -193,6 +219,11 @@ function connectWS() {
     } else if (msg.event === 'trade_opened') {
       loadTrades();
       showToast(`✅ Trade opened: ${cleanSym(msg.data.symbol)} ${msg.data.side.toUpperCase()}`, 'green');
+    } else if (msg.event === 'mode_changed') {
+      currentMode = msg.data.mode;
+      updateModeButtons(msg.data.mode);
+      loadStatus();
+      showToast(`Mode switched to ${msg.data.label}`, 'indigo');
     }
   };
 
@@ -219,6 +250,7 @@ async function loadStatus() {
     updateBalance(d.balance);
     updateStats(d.stats);
     updateConfig(d.config, d.symbols);
+    if (d.mode) { currentMode = d.mode; updateModeButtons(d.mode); }
     if (d.symbols) initSymbolCards(d.symbols);
   } catch(e) {}
 }
@@ -281,13 +313,40 @@ function updateConfig(cfg, symbols) {
   document.getElementById('cfgTimeframe').textContent = cfg.timeframe;
   document.getElementById('cfgRisk').textContent = `${(cfg.risk_per_trade*100).toFixed(0)}%`;
   document.getElementById('cfgLeverage').textContent = `${cfg.max_leverage}x`;
-  document.getElementById('cfgMaxPos').textContent = cfg.max_open_positions;
   document.getElementById('cfgMinScore').textContent = `${Math.round((cfg.ml_confidence_threshold||0.58)*100)}%`;
+  document.getElementById('cfgAdx').textContent = cfg.adx_min_strength;
+  const secs = cfg.scan_interval || 300;
+  document.getElementById('cfgScanInterval').textContent = secs >= 60 ? `${secs/60} min` : `${secs}s`;
+  document.getElementById('cfgSl').textContent = `${(cfg.atr_sl_multiplier||1.5).toFixed(1)}× ATR`;
+  document.getElementById('cfgTp').textContent = `${(cfg.atr_tp_multiplier||3.0).toFixed(1)}× ATR`;
   if (symbols) {
     document.getElementById('cfgSymbols').innerHTML = symbols.map(s =>
       `<span class="text-xs px-2 py-1 rounded bg-slate-700 font-mono">${cleanSym(s)}</span>`
     ).join('');
   }
+}
+
+function updateModeButtons(mode) {
+  ['scalp_15m', 'swing_1h', 'swing_4h'].forEach(m => {
+    const btn = document.getElementById(`modeBtn_${m}`);
+    if (btn) btn.classList.toggle('active', m === mode);
+  });
+}
+
+async function switchMode(mode) {
+  if (mode === currentMode) return;
+  try {
+    const r = await fetch(`${API}/api/mode`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({mode}),
+    });
+    if (r.ok) {
+      currentMode = mode;
+      updateModeButtons(mode);
+      await loadStatus();
+    }
+  } catch(e) {}
 }
 
 function confBarHTML(prob, side) {

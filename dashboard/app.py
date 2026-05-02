@@ -5,8 +5,9 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
 from bot import config, trader
 from bot.exchange import fetch_balance, fetch_positions
@@ -71,15 +72,58 @@ async def get_status():
         "balance": balance,
         "stats": stats,
         "symbols": config.SYMBOLS,
+        "mode": config.CURRENT_MODE,
         "config": {
             "risk_per_trade": config.RISK_PER_TRADE,
             "max_leverage": config.MAX_LEVERAGE,
             "max_open_positions": config.MAX_OPEN_POSITIONS,
-            "ml_confidence_threshold": config.ML_CONFIDENCE_THRESHOLD,
-            "adx_min_strength": config.ADX_MIN_STRENGTH,
-            "timeframe": config.TIMEFRAME,
+            "ml_confidence_threshold": config.active["ml_confidence_threshold"],
+            "adx_min_strength": config.active["adx_min_strength"],
+            "timeframe": config.active["timeframe"],
+            "scan_interval": config.active["scan_interval"],
+            "atr_sl_multiplier": config.active["atr_sl_multiplier"],
+            "atr_tp_multiplier": config.active["atr_tp_multiplier"],
         },
     }
+
+
+@app.get("/api/mode")
+async def get_mode():
+    return {
+        "current": config.CURRENT_MODE,
+        "modes": [
+            {"id": k, "label": v["label"], "timeframe": v["timeframe"]}
+            for k, v in config.TRADING_MODES.items()
+        ],
+    }
+
+
+class ModeRequest(BaseModel):
+    mode: str
+
+
+@app.post("/api/mode")
+async def set_mode(body: ModeRequest):
+    try:
+        config.set_mode(body.mode)
+        logger.info("Trading mode switched to: %s", body.mode)
+        await manager.broadcast({
+            "event": "mode_changed",
+            "data": {"mode": body.mode, "label": config.active["label"]},
+        })
+        return {
+            "mode": config.CURRENT_MODE,
+            "config": {
+                "timeframe": config.active["timeframe"],
+                "scan_interval": config.active["scan_interval"],
+                "ml_confidence_threshold": config.active["ml_confidence_threshold"],
+                "adx_min_strength": config.active["adx_min_strength"],
+                "atr_sl_multiplier": config.active["atr_sl_multiplier"],
+                "atr_tp_multiplier": config.active["atr_tp_multiplier"],
+            },
+        }
+    except ValueError as e:
+        return JSONResponse(status_code=400, content={"error": str(e)})
 
 
 @app.get("/api/positions")

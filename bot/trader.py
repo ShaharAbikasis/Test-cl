@@ -240,17 +240,18 @@ async def _scan_symbols():
 async def trading_loop():
     global _running
     _running = True
-    logger.info("Trading loop started")
+    logger.info("Trading loop started (mode: %s)", config.CURRENT_MODE)
     while _running:
         await _scan_symbols()
-        await asyncio.sleep(config.SCAN_INTERVAL_SECONDS)
+        # Read scan_interval dynamically so mode switches take effect after current sleep
+        await asyncio.sleep(config.active["scan_interval"])
 
 
 async def retrain_loop():
     """Retrain all ML models every ML_RETRAIN_HOURS hours."""
     await asyncio.sleep(config.ML_RETRAIN_HOURS * 3600)
     while _running:
-        logger.info("Retraining ML models...")
+        logger.info("Retraining ML models for mode: %s", config.CURRENT_MODE)
         for symbol in config.SYMBOLS:
             try:
                 df = await fetch_ohlcv(symbol)

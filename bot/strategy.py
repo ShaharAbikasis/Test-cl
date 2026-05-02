@@ -3,9 +3,7 @@ from dataclasses import dataclass
 
 import pandas as pd
 
-from bot.config import (
-    ML_CONFIDENCE_THRESHOLD, ML_SHORT_THRESHOLD, ADX_MIN_STRENGTH
-)
+from bot import config
 from bot.indicators import compute_indicators, get_last_row
 from bot.ml_model import predict_proba_up
 
@@ -32,9 +30,8 @@ def evaluate_signal(symbol: str, df: pd.DataFrame) -> SignalResult:
     adx_val  = float(cur.get("ADX_14", 0) or 0)
     ema200   = float(cur["EMA_200"])
     trend_up = price > ema200
-    trending = adx_val >= ADX_MIN_STRENGTH
+    trending = adx_val >= config.active["adx_min_strength"]
 
-    # ML prediction
     prob = predict_proba_up(symbol, df)
     if prob is None:
         return SignalResult(symbol, "none", 0.0, ["Model not ready"], price, atr)
@@ -49,9 +46,11 @@ def evaluate_signal(symbol: str, df: pd.DataFrame) -> SignalResult:
 
     factors.append(f"ADX {adx_val:.1f} — {'strong trend' if trending else 'weak trend'}")
 
-    # Entry conditions
-    go_long  = prob > ML_CONFIDENCE_THRESHOLD and trend_up  and trending
-    go_short = prob < ML_SHORT_THRESHOLD       and not trend_up and trending
+    conf_threshold = config.active["ml_confidence_threshold"]
+    short_threshold = config.active["ml_short_threshold"]
+
+    go_long  = prob > conf_threshold  and trend_up     and trending
+    go_short = prob < short_threshold and not trend_up and trending
 
     if go_long:
         return SignalResult(symbol, "long",  prob,       factors, price, atr)
