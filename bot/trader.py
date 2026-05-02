@@ -152,6 +152,7 @@ async def _scan_symbols():
         balance = balance_data["free"]
         positions = await fetch_positions()
         open_count = len(positions)
+        open_symbols = {p["symbol"].replace("/USDT:USDT", "USDT").replace("/", "") for p in positions}
 
         for symbol in config.SYMBOLS:
             try:
@@ -167,8 +168,11 @@ async def _scan_symbols():
                         "price": signal.price,
                     })
 
+                sym_key = symbol.replace("/USDT:USDT", "USDT").replace("/", "")
+                already_open = sym_key in open_symbols
                 can_trade = (
                     signal.side != "none"
+                    and not already_open
                     and open_count < config.MAX_OPEN_POSITIONS
                     and balance > 10
                 )
