@@ -26,14 +26,21 @@ SYMBOLS = [
 ]
 
 TIMEFRAME = "4h"
-CANDLES_LIMIT = 250
+CANDLES_LIMIT = 1000
 
-RISK_PER_TRADE = 0.02        # 2% of account per trade
+RISK_PER_TRADE = 0.02
 MAX_LEVERAGE = 5
 MAX_OPEN_POSITIONS = 3
-MIN_SIGNAL_SCORE = 4         # out of 5
 ATR_SL_MULTIPLIER = 1.5
 ATR_TP_MULTIPLIER = 3.0
 
-SCAN_INTERVAL_SECONDS = 300  # scan every 5 minutes
+# ML settings
+ML_CONFIDENCE_THRESHOLD = 0.58   # min prob to go long
+ML_SHORT_THRESHOLD = 0.42        # max prob to go short (1 - 0.58)
+ML_LABEL_HORIZON = 4             # predict price 4 candles ahead
+ML_LABEL_PCT = 0.003             # target move: >0.3%
+ML_RETRAIN_HOURS = 24
+ADX_MIN_STRENGTH = 20            # only trade in trending markets
+
+SCAN_INTERVAL_SECONDS = 300
 MONITOR_INTERVAL_SECONDS = 30

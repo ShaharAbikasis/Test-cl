@@ -12,6 +12,7 @@ from bot.exchange import (
 )
 from bot.strategy import evaluate_signal
 from bot.risk import calculate_trade_params
+from bot.ml_model import train_model
 from bot import notifications
 
 logger = logging.getLogger(__name__)
@@ -228,6 +229,20 @@ async def trading_loop():
     while _running:
         await _scan_symbols()
         await asyncio.sleep(config.SCAN_INTERVAL_SECONDS)
+
+
+async def retrain_loop():
+    """Retrain all ML models every ML_RETRAIN_HOURS hours."""
+    await asyncio.sleep(config.ML_RETRAIN_HOURS * 3600)
+    while _running:
+        logger.info("Retraining ML models...")
+        for symbol in config.SYMBOLS:
+            try:
+                df = await fetch_ohlcv(symbol)
+                train_model(symbol, df)
+            except Exception as e:
+                logger.error("Retrain failed for %s: %s", symbol, e)
+        await asyncio.sleep(config.ML_RETRAIN_HOURS * 3600)
 
 
 async def stop_trading():

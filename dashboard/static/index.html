@@ -15,9 +15,8 @@
     .badge-long { background: #064e3b; color: #34d399; }
     .badge-short { background: #450a0a; color: #f87171; }
     .badge-none { background: #1e293b; color: #94a3b8; }
-    .score-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
-    .score-filled { background: #f59e0b; }
-    .score-empty { background: #374151; }
+    .conf-bar-bg { background: #1e293b; border-radius: 4px; height: 6px; overflow: hidden; }
+    .conf-bar-fill { height: 100%; border-radius: 4px; transition: width 0.4s; }
     .pnl-pos { color: #34d399; }
     .pnl-neg { color: #f87171; }
     ::-webkit-scrollbar { width: 6px; }
@@ -291,12 +290,16 @@ function updateConfig(cfg, symbols) {
   }
 }
 
-function scoreDotsHTML(score) {
-  let h = '';
-  for (let i = 0; i < 5; i++) {
-    h += `<span class="score-dot ${i < score ? 'score-filled' : 'score-empty'}"></span>`;
-  }
-  return h;
+function confBarHTML(prob, side) {
+  const pct = Math.round((prob || 0) * 100);
+  const color = side === 'long' ? '#34d399' : side === 'short' ? '#f87171' : '#6366f1';
+  return `
+    <div class="flex items-center gap-1 mt-1">
+      <div class="conf-bar-bg flex-1">
+        <div class="conf-bar-fill" style="width:${pct}%;background:${color}"></div>
+      </div>
+      <span class="text-xs font-mono" style="color:${color}">${pct}%</span>
+    </div>`;
 }
 
 function initSymbolCards(symbols) {
@@ -309,7 +312,7 @@ function initSymbolCards(symbols) {
       <div class="text-xs font-bold text-slate-300">${s}</div>
       <div id="card_${s}_price" class="font-mono text-sm">—</div>
       <div id="card_${s}_side" class="text-xs badge-none rounded px-1 py-0.5 inline-block w-fit">—</div>
-      <div id="card_${s}_dots" class="flex gap-1 mt-1">${scoreDotsHTML(0)}</div>
+      <div id="card_${s}_conf">${confBarHTML(0, 'none')}</div>
     </div>`;
   }).join('');
 }
@@ -318,13 +321,13 @@ function renderSymbolCards() {
   Object.values(symbolScores).forEach(sig => {
     const s = cleanSym(sig.symbol);
     const priceEl = document.getElementById(`card_${s}_price`);
-    const sideEl = document.getElementById(`card_${s}_side`);
-    const dotsEl = document.getElementById(`card_${s}_dots`);
+    const sideEl  = document.getElementById(`card_${s}_side`);
+    const confEl  = document.getElementById(`card_${s}_conf`);
     if (!priceEl) return;
     priceEl.textContent = `$${parseFloat(sig.price).toLocaleString('en', {minimumFractionDigits:2,maximumFractionDigits:4})}`;
-    sideEl.textContent = sig.side.toUpperCase();
-    sideEl.className = `text-xs rounded px-1 py-0.5 inline-block w-fit badge-${sig.side}`;
-    dotsEl.innerHTML = scoreDotsHTML(sig.score || 0);
+    sideEl.textContent  = (sig.side||'none').toUpperCase();
+    sideEl.className    = `text-xs rounded px-1 py-0.5 inline-block w-fit badge-${sig.side||'none'}`;
+    confEl.innerHTML    = confBarHTML(sig.score, sig.side);
   });
 }
 
@@ -335,6 +338,7 @@ function addSignalToFeed(sig) {
 
   const color = sig.side === 'long' ? 'text-emerald-400' : sig.side === 'short' ? 'text-red-400' : 'text-slate-400';
   const arrow = sig.side === 'long' ? '▲' : sig.side === 'short' ? '▼' : '—';
+  const pct   = Math.round((sig.score || 0) * 100);
   const el = document.createElement('div');
   el.className = 'bg-slate-800 rounded-lg p-2 text-xs';
   el.innerHTML = `
@@ -342,14 +346,10 @@ function addSignalToFeed(sig) {
       <span class="font-bold">${cleanSym(sig.symbol)}</span>
       <span class="${color} font-mono">${arrow} ${(sig.side||'').toUpperCase()}</span>
     </div>
-    <div class="flex items-center gap-2 mt-1">
-      <div class="flex gap-0.5">${scoreDotsHTML(sig.score||0)}</div>
-      <span class="text-slate-400">${sig.score||0}/5</span>
-      <span class="text-slate-500 ml-auto">$${parseFloat(sig.price||0).toFixed(2)}</span>
-    </div>`;
+    ${confBarHTML(sig.score, sig.side)}
+    <div class="text-slate-500 mt-1">$${parseFloat(sig.price||0).toFixed(2)} · ML ${pct}%</div>`;
   feed.prepend(el);
 
-  // keep max 30 items
   while (feed.children.length > 30) feed.removeChild(feed.lastChild);
 }
 
@@ -390,7 +390,7 @@ function renderTrades(trades) {
       <td class="py-2 pr-3 text-right font-mono">$${parseFloat(t.entry_price||0).toFixed(4)}</td>
       <td class="py-2 pr-3 text-right font-mono">${t.exit_price ? '$'+parseFloat(t.exit_price).toFixed(4) : '—'}</td>
       <td class="py-2 pr-3 text-right font-mono ${statusColor}">${pnlText}</td>
-      <td class="py-2 text-right">${scoreDotsHTML(t.signal_score||0)}</td>
+      <td class="py-2 text-right font-mono text-indigo-400">${Math.round((t.signal_score||0)*100)}%</td>
     </tr>`;
   }).join('');
 }

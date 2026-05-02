@@ -104,6 +104,7 @@ async def get_signals(limit: int = 20):
 async def start_bot():
     if not trader.is_running():
         asyncio.create_task(trader.trading_loop())
+        asyncio.create_task(trader.retrain_loop())
         return {"status": "started"}
     return {"status": "already_running"}
 
