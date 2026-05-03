@@ -7,9 +7,10 @@ import aiosqlite
 
 from bot import config
 from bot.exchange import (
+    exchange,
     fetch_ohlcv, fetch_balance, fetch_positions,
     set_leverage, place_order, place_stop_loss, place_take_profit,
-    sync_time, load_markets,
+    update_position_tp_sl, sync_time, load_markets,
 )
 from bot.strategy import evaluate_signal
 from bot.risk import calculate_trade_params
@@ -183,7 +184,10 @@ async def _scan_symbols():
                         await _save_signal(signal, acted_on=False)
                     continue
 
-                params = calculate_trade_params(balance, signal.price, signal.atr, signal.side)
+                market   = exchange.markets.get(symbol, {})
+                min_qty  = float((market.get("limits", {}).get("amount", {}).get("min")) or 0.001)
+                qty_step = float((market.get("precision", {}).get("amount")) or 0.001)
+                params = calculate_trade_params(balance, signal.price, signal.atr, signal.side, min_qty, qty_step)
                 await _save_signal(signal, acted_on=True)
 
                 await set_leverage(symbol, params["leverage"])
@@ -194,13 +198,13 @@ async def _scan_symbols():
                 filled_qty = float(order.get("filled") or params["qty"])
 
                 try:
-                    sl_order = await place_stop_loss(symbol, close_side, params["sl_price"])
+                    sl_order = await place_stop_loss(symbol, close_side, params["sl_price"], filled_qty)
                     logger.info("SL placed for %s @ %s (id=%s)", symbol, params["sl_price"], sl_order.get("id"))
                 except Exception as sl_err:
                     logger.error("SL placement failed for %s: %s", symbol, sl_err)
 
                 try:
-                    tp_order = await place_take_profit(symbol, close_side, params["tp_price"])
+                    tp_order = await place_take_profit(symbol, close_side, params["tp_price"], filled_qty)
                     logger.info("TP placed for %s @ %s (id=%s)", symbol, params["tp_price"], tp_order.get("id"))
                 except Exception as tp_err:
                     logger.error("TP placement failed for %s: %s", symbol, tp_err)

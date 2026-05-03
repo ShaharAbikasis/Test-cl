@@ -29,9 +29,10 @@ def calculate_trade_params(
     position_usdt = risk_usdt / (sl_dist / entry)
     leverage = min(config.MAX_LEVERAGE, max(1, int(position_usdt / (balance * 0.1))))
 
-    # Safety cap: margin must not exceed 90% of free balance even when
-    # leverage is capped and ATR is small.
-    max_position_usdt = balance * leverage * 0.90
+    # Cap margin per position to balance / MAX_OPEN_POSITIONS so multiple
+    # positions can coexist without exhausting available margin.
+    max_margin = (balance / config.MAX_OPEN_POSITIONS) * 0.90
+    max_position_usdt = max_margin * leverage
     position_usdt = min(position_usdt, max_position_usdt)
 
     qty = position_usdt / entry

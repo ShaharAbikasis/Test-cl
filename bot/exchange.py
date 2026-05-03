@@ -105,32 +105,54 @@ async def place_order(symbol: str, side: str, amount: float, price: float | None
     return await exchange.create_order(symbol, order_type, side, precise_qty, price)
 
 
-async def place_stop_loss(symbol: str, close_side: str, sl_price: float) -> dict:
-    """Place a STOP_MARKET order with closePosition=true (closes entire position)."""
+async def place_stop_loss(symbol: str, close_side: str, sl_price: float, qty: float) -> dict:
+    """Place a STOP_MARKET order on the position (shows as SL in Binance position row)."""
     precise_price = float(exchange.price_to_precision(symbol, sl_price))
+    precise_qty = float(exchange.amount_to_precision(symbol, qty))
     order = await exchange.create_order(
-        symbol, "stop_market", close_side, 0,
+        symbol, "stop_market", close_side, precise_qty,
         params={
             "stopPrice": precise_price,
-            "closePosition": "true",
+            "reduceOnly": True,
             "workingType": "MARK_PRICE",
+            "priceProtect": "TRUE",
         },
     )
     return order
 
 
-async def place_take_profit(symbol: str, close_side: str, tp_price: float) -> dict:
-    """Place a TAKE_PROFIT_MARKET order with closePosition=true (closes entire position)."""
+async def place_take_profit(symbol: str, close_side: str, tp_price: float, qty: float) -> dict:
+    """Place a TAKE_PROFIT_MARKET order on the position (shows as TP in Binance position row)."""
     precise_price = float(exchange.price_to_precision(symbol, tp_price))
+    precise_qty = float(exchange.amount_to_precision(symbol, qty))
     order = await exchange.create_order(
-        symbol, "take_profit_market", close_side, 0,
+        symbol, "take_profit_market", close_side, precise_qty,
         params={
             "stopPrice": precise_price,
-            "closePosition": "true",
+            "reduceOnly": True,
             "workingType": "MARK_PRICE",
+            "priceProtect": "TRUE",
         },
     )
     return order
+
+
+async def update_position_tp_sl(
+    symbol: str, close_side: str, sl_price: float, tp_price: float, qty: float
+) -> dict:
+    """Cancel existing SL/TP orders for the symbol and re-place updated ones."""
+    open_orders = await exchange.fetch_open_orders(symbol)
+    for o in open_orders:
+        order_type = (o.get("type") or "").lower()
+        if order_type in ("stop_market", "take_profit_market"):
+            try:
+                await exchange.cancel_order(o["id"], symbol)
+            except Exception:
+                pass
+
+    sl = await place_stop_loss(symbol, close_side, sl_price, qty)
+    tp = await place_take_profit(symbol, close_side, tp_price, qty)
+    return {"sl": sl, "tp": tp}
 
 
 async def close_exchange() -> None:
