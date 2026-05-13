@@ -191,17 +191,28 @@ async def _scan_symbols():
                 close_side = "sell" if order_side == "buy" else "buy"
                 order = await place_order(symbol, order_side, params["qty"])
                 entry_price = float(order.get("average") or signal.price)
-                filled_qty = float(order.get("filled") or params["qty"])
+
+                # Fetch the actual position size — more reliable than order["filled"]
+                # for setting reduceOnly SL/TP that appear in the Binance position row.
+                await asyncio.sleep(0.5)
+                live_positions = await fetch_positions()
+                position_qty = next(
+                    (p["size"] for p in live_positions if symbol in p["symbol"]),
+                    float(order.get("filled") or params["qty"]),
+                )
+                filled_qty = position_qty
 
                 try:
-                    sl_order = await place_stop_loss(symbol, close_side, params["sl_price"])
-                    logger.info("SL placed for %s @ %s (id=%s)", symbol, params["sl_price"], sl_order.get("id"))
+                    sl_order = await place_stop_loss(symbol, close_side, position_qty, params["sl_price"])
+                    logger.info("SL placed for %s qty=%.4f @ %s (id=%s)",
+                                symbol, position_qty, params["sl_price"], sl_order.get("id"))
                 except Exception as sl_err:
                     logger.error("SL placement failed for %s: %s", symbol, sl_err)
 
                 try:
-                    tp_order = await place_take_profit(symbol, close_side, params["tp_price"])
-                    logger.info("TP placed for %s @ %s (id=%s)", symbol, params["tp_price"], tp_order.get("id"))
+                    tp_order = await place_take_profit(symbol, close_side, position_qty, params["tp_price"])
+                    logger.info("TP placed for %s qty=%.4f @ %s (id=%s)",
+                                symbol, position_qty, params["tp_price"], tp_order.get("id"))
                 except Exception as tp_err:
                     logger.error("TP placement failed for %s: %s", symbol, tp_err)
 

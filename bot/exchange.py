@@ -105,32 +105,32 @@ async def place_order(symbol: str, side: str, amount: float, price: float | None
     return await exchange.create_order(symbol, order_type, side, precise_qty, price)
 
 
-async def place_stop_loss(symbol: str, close_side: str, sl_price: float) -> dict:
-    """Place a STOP_MARKET order with closePosition=true (closes entire position)."""
+async def place_stop_loss(symbol: str, close_side: str, qty: float, sl_price: float) -> dict:
+    """Place STOP_MARKET with reduceOnly so it appears in the Binance position row."""
     precise_price = float(exchange.price_to_precision(symbol, sl_price))
-    order = await exchange.create_order(
-        symbol, "stop_market", close_side, 0,
+    precise_qty = float(exchange.amount_to_precision(symbol, qty))
+    return await exchange.create_order(
+        symbol, "stop_market", close_side, precise_qty,
         params={
             "stopPrice": precise_price,
-            "closePosition": "true",
+            "reduceOnly": "true",
             "workingType": "MARK_PRICE",
         },
     )
-    return order
 
 
-async def place_take_profit(symbol: str, close_side: str, tp_price: float) -> dict:
-    """Place a TAKE_PROFIT_MARKET order with closePosition=true (closes entire position)."""
+async def place_take_profit(symbol: str, close_side: str, qty: float, tp_price: float) -> dict:
+    """Place TAKE_PROFIT_MARKET with reduceOnly so it appears in the Binance position row."""
     precise_price = float(exchange.price_to_precision(symbol, tp_price))
-    order = await exchange.create_order(
-        symbol, "take_profit_market", close_side, 0,
+    precise_qty = float(exchange.amount_to_precision(symbol, qty))
+    return await exchange.create_order(
+        symbol, "take_profit_market", close_side, precise_qty,
         params={
             "stopPrice": precise_price,
-            "closePosition": "true",
+            "reduceOnly": "true",
             "workingType": "MARK_PRICE",
         },
     )
-    return order
 
 
 async def close_exchange() -> None:
